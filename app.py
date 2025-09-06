@@ -87,7 +87,7 @@ def build_anki_deck(cards, deck_name: str) -> str:
         fields=[{"name": "Front"}, {"name": "Back"}, {"name": "Extra"}],
         templates=[{
             "name": "Card 1",
-            "qfmt": "{{Front}}<br>{{Extra}}",
+            "qfmt": "{{Front}}",
             "afmt": "{{Front}}<hr id='answer'>{{Back}}<br>{{Extra}}",
         }],
     )
