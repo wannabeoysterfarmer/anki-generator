@@ -8,11 +8,18 @@ from pathlib import Path
 import streamlit as st
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
-
 from openai import OpenAI
 
+# --- Optional OCR deps (safe import) ---
+# If pytesseract/Pillow or tesseract binary aren't present, we keep running without OCR.
+try:
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+except Exception:
+    OCR_AVAILABLE = False
+
 # ---- Config / Keys ----
-# Put your key in Streamlit Secrets (recommended): Settings -> Secrets -> add OPENAI_API_KEY
 OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     st.error("No OpenAI API key found. Add OPENAI_API_KEY to Streamlit secrets or env.")
@@ -39,8 +46,7 @@ Slide:
     for _ in range(retries):
         try:
             res = client.chat.completions.create(
-                # Use a fast, cheap model; change if you have access to others
-                model="gpt-4o-mini",
+                model="gpt-4o-mini",  # change if you prefer a different model
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
             )
@@ -61,8 +67,7 @@ Slide:
             if current_q and current_a:
                 qa_pairs.append((current_q, current_a))
             return qa_pairs[:max_cards]
-        except Exception as e:
-            # Backoff a little and try again
+        except Exception:
             time.sleep(3)
     return []
 
@@ -71,12 +76,30 @@ def extract_slides(pdf_path: str, image_dir: str):
     doc = fitz.open(pdf_path)
     slides = []
     for i, page in enumerate(doc):
-        text = page.get_text().strip()
+        text = (page.get_text() or "").strip()
         img_path = os.path.join(image_dir, f"slide_{i+1}.png")
         pix = page.get_pixmap(dpi=150)
         pix.save(img_path)
         slides.append((text, img_path))
     return slides
+
+def extract_text_with_ocr(image_path: str) -> str:
+    """OCR the rendered slide image to recover text when PDF text is empty."""
+    if not OCR_AVAILABLE:
+        return ""
+    try:
+        # Light preprocessing helps OCR a bit
+        with Image.open(image_path) as im:
+            im = im.convert("L")  # grayscale
+            # Small upscale for tiny text
+            w, h = im.size
+            if max(w, h) < 1200:
+                scale = 1200 / max(w, h)
+                im = im.resize((int(w*scale), int(h*scale)))
+        text = pytesseract.image_to_string(im)
+        return (text or "").strip()
+    except Exception:
+        return ""
 
 def build_anki_deck(cards, deck_name: str) -> str:
     """cards: list[(q, a, image_path)] -> writes deck, returns file path."""
@@ -85,9 +108,10 @@ def build_anki_deck(cards, deck_name: str) -> str:
         model_id,
         "Basic QA Model",
         fields=[{"name": "Front"}, {"name": "Back"}, {"name": "Extra"}],
+        # Put image ONLY on the answer (Extra is shown on back below Back)
         templates=[{
             "name": "Card 1",
-            "qfmt": "{{Front}}",
+            "qfmt": "{{Front}}",  # no image on question side
             "afmt": "{{Front}}<hr id='answer'>{{Back}}<br>{{Extra}}",
         }],
     )
@@ -100,6 +124,7 @@ def build_anki_deck(cards, deck_name: str) -> str:
     for (q, a, img_path) in cards:
         extra_html = ""
         if img_path:
+            # Reference by basename; include full path in media_files
             extra_html = f"<br><img src='{Path(img_path).name}'>"
             media_files.append(img_path)
         note = Note(
@@ -132,7 +157,13 @@ def process_pdf_and_generate_deck(uploaded_file, max_cards_per_slide: int = 1):
         # Generate cards
         anki_cards = []
         for i, (text, image_path) in enumerate(slides, start=1):
-            text_for_model = text.strip() if text else "No text on this slide; infer the key concept from the image filename only."
+            if not text.strip():
+                # OCR fallback when the PDF page doesn't expose selectable text
+                ocr_text = extract_text_with_ocr(image_path)
+                text_for_model = ocr_text if ocr_text else "No readable text; infer a sensible question from typical med-school slide content (title, axes, labels are unreadable)."
+            else:
+                text_for_model = text.strip()
+
             qa_list = generate_qa_cards(text_for_model, max_cards=max_cards_per_slide)
             for q, a in qa_list:
                 anki_cards.append((q, a, image_path))
@@ -143,7 +174,6 @@ def process_pdf_and_generate_deck(uploaded_file, max_cards_per_slide: int = 1):
         deck_name = f"{Path(pdf_path).stem} - Generated Anki Deck"
         apkg_path = build_anki_deck(anki_cards, deck_name)
 
-        # Read bytes so Streamlit can offer a download button
         with open(apkg_path, "rb") as f:
             apkg_bytes = f.read()
 
@@ -152,6 +182,9 @@ def process_pdf_and_generate_deck(uploaded_file, max_cards_per_slide: int = 1):
 # ---- UI ----
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
+
+if not OCR_AVAILABLE:
+    st.info("OCR fallback not available. To enable OCR for image-only slides, add `pytesseract`, `Pillow` to requirements and `tesseract-ocr` to packages.")
 
 uploaded_pdf = st.file_uploader("Upload your lecture PDF", type=["pdf"])
 max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step=1)
