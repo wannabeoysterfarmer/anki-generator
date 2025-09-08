@@ -10,6 +10,13 @@ import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
 
+# add at top with other imports
+import base64
+
+def _img_b64(path: str) -> str:
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
 # --- Optional OCR deps (safe import) ---
 try:
     from PIL import Image
@@ -209,16 +216,32 @@ if uploaded_pdf is not None:
         thumbs = make_thumbnails_for_selection(pdf_preview_path, td_preview)
 
         st.subheader("Select slides to include")
-        st.caption("Tip: clear all to include **all** slides.")
+        st.caption("Click the checkboxes below the slides you want. Selected slides glow with a border.")
 
+        # 4-column grid
         cols = st.columns(4)
         for idx, (pnum, img_path) in enumerate(thumbs):
             with cols[idx % 4]:
-                st.image(img_path, caption=f"Slide {pnum}", use_column_width=True)
+                # checkbox state (default True = all selected to start)
+                key = f"sel_{pnum}"
+                checked = st.checkbox(f"Slide {pnum}", value=True, key=key)
+                # dynamic border to show selection
+                border = "3px solid #10b981" if checked else "1px solid #3a3a3a"  # teal vs neutral
+                b64 = _img_b64(img_path)
+                st.markdown(
+                    f"""
+                    <div style="border:{border};border-radius:8px;padding:6px;margin-top:4px;">
+                      <img src="data:image/png;base64,{b64}" style="width:100%;border-radius:6px;" />
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-        all_options = [p for p, _ in thumbs]
-        # If user clears all, you'll pass [] which your pipeline treats as "all pages"
-        selected_pages = st.multiselect("Slides to include", options=all_options, default=all_options)
+        # Build selected_pages from the boxes
+        selected_pages = [p for p, _ in thumbs if st.session_state.get(f"sel_{p}", False)]
+        if len(selected_pages) == 0:
+            st.info("No slides selected — generating from **all** slides.")
+            selected_pages = None  # treat as all pages downstream
 
 if st.button("Generate Deck"):
     with st.spinner("Processing..."):
