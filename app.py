@@ -12,7 +12,35 @@ from openai import OpenAI
 
 # add at top with other imports
 import base64
+from functools import lru_cache
 
+@st.cache_data(show_spinner=False)
+def _pdf_byteskey(pdf_bytes: bytes) -> str:
+    # small key so cache invalidates when pdf changes
+    import hashlib
+    return hashlib.sha1(pdf_bytes).hexdigest()
+
+@st.cache_data(show_spinner=False)
+def make_thumbnails_cached(pdf_bytes: bytes, dpi: int = 90) -> list[tuple[int, bytes]]:
+    """
+    Return [(page_num, png_bytes)] for ALL pages.
+    Cached by the content of the uploaded PDF.
+    """
+    key = _pdf_byteskey(pdf_bytes)  # used implicitly by cache
+    import io, fitz
+    thumbs = []
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    for i, page in enumerate(doc, start=1):
+        pix = page.get_pixmap(dpi=dpi)
+        buf = io.BytesIO(pix.tobytes("png"))
+        thumbs.append((i, buf.getvalue()))
+    return thumbs
+
+def init_selection(n_pages: int):
+    sel = st.session_state.get("selected_pages_set")
+    if sel is None:
+        st.session_state.selected_pages_set = set(range(1, n_pages + 1))  # default: all
+        
 def _img_b64(path: str) -> str:
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
@@ -210,59 +238,86 @@ max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step
 
 selected_pages = None
 if uploaded_pdf is not None:
-    with tempfile.TemporaryDirectory() as td_preview:
-        pdf_preview_path = os.path.join(td_preview, uploaded_pdf.name)
-        with open(pdf_preview_path, "wb") as f:
-            f.write(uploaded_pdf.getbuffer())
+    pdf_bytes = uploaded_pdf.getvalue()
 
-        thumbs = make_thumbnails_for_selection(pdf_preview_path, td_preview)
+    # 1) Cached thumbnails (MUCH faster on rerun)
+    thumbs = make_thumbnails_cached(pdf_bytes, dpi=90)
+    n_pages = len(thumbs)
+    init_selection(n_pages)
 
-        st.subheader("Select slides to include")
-        st.caption("Click checkboxes under the slides you want. Selected slides show a teal border.")
+    st.subheader("Select slides to include")
+    st.caption("Use the paginator. Click checkboxes and press **Apply selection**.")
 
-        # --- Bulk select controls
-        c1, c2, c3 = st.columns([1, 1, 6])
-        with c1:
-            if st.button("Uncheck All"):
-                for p, _ in thumbs:
-                    st.session_state[f"sel_{p}"] = False
-        with c2:
-            if st.button("Check All"):
-                for p, _ in thumbs:
-                    st.session_state.setdefault(f"sel_{p}", True)  # ensure key exists
-                    st.session_state[f"sel_{p}"] = True
+    # 2) Pagination + thumbs/row (bigger thumbs → fewer per row)
+    colA, colB, colC = st.columns([2,2,3])
+    with colA:
+        thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
+    with colB:
+        page_size = st.selectbox("Slides per page", [8, 12, 15, 20, 30], index=2)
+    with colC:
+        # compute total pages
+        import math
+        total_pages = math.ceil(n_pages / page_size)
+        page_idx = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
 
-        # --- Grid of thumbnails
-        THUMBS_PER_ROW = 3  # ← set to 2 for bigger thumbnails, 4 for smaller
-        for row_start in range(0, len(thumbs), THUMBS_PER_ROW):
-            row_thumbs = thumbs[row_start: row_start + THUMBS_PER_ROW]
-            cols = st.columns(len(row_thumbs))
-            for col, (pnum, img_path) in zip(cols, row_thumbs):
+    start = (page_idx - 1) * page_size
+    end = min(start + page_size, n_pages)
+    page_slice = thumbs[start:end]
+
+    # 3) Bulk controls for the *current* page only
+    c1, c2, _ = st.columns([1,1,6])
+    with c1:
+        if st.button("Uncheck All (page)"):
+            for pnum, _ in page_slice:
+                st.session_state.selected_pages_set.discard(pnum)
+    with c2:
+        if st.button("Check All (page)"):
+            for pnum, _ in page_slice:
+                st.session_state.selected_pages_set.add(pnum)
+
+    # 4) Selection grid inside a form → no re-render until submit
+    with st.form(key=f"selection_form_page_{page_idx}"):
+        # grid rows
+        for row_start in range(0, len(page_slice), thumbs_per_row):
+            row_items = page_slice[row_start: row_start + thumbs_per_row]
+            cols = st.columns(len(row_items))
+            for col, (pnum, png_bytes) in zip(cols, row_items):
                 with col:
+                    # show image bytes directly (faster than base64)
+                    st.image(png_bytes, caption=f"Slide {pnum}", use_container_width=True)
                     key = f"sel_{pnum}"
-                    # default to True (selected) on first render
-                    if key not in st.session_state:
-                        st.session_state[key] = True
-                    checked = st.checkbox(f"Slide {pnum}", key=key)
-                    border = "3px solid #10b981" if checked else "1px solid #3a3a3a"
+                    default_checked = (pnum in st.session_state.selected_pages_set)
+                    checked = st.checkbox("Select", value=default_checked, key=key)
+                    # we **don’t** modify the set yet; do it on submit below
+        apply_now = st.form_submit_button("Apply selection")
 
-                    # Convert image to base64 for consistent sizing/border
-                    b64 = _img_b64(img_path)  # ← make sure this helper exists in your file
-                    st.markdown(
-                        f"""
-                        <div style="border:{border};border-radius:8px;padding:6px;margin-top:4px;">
-                          <img src="data:image/png;base64,{b64}" style="width:100%;border-radius:6px;" />
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+        if apply_now:
+            # Read all checkboxes shown on this page and write back to the set once
+            for (pnum, _png) in page_slice:
+                key = f"sel_{pnum}"
+                if st.session_state.get(key, False):
+                    st.session_state.selected_pages_set.add(pnum)
+                else:
+                    st.session_state.selected_pages_set.discard(pnum)
 
-        # Build selected_pages list from session_state
-        selected_pages = [p for p, _ in thumbs if st.session_state.get(f"sel_{p}", False)]
-        if len(selected_pages) == 0:
-            st.info("No slides selected — generating from **all** slides.")
-            selected_pages = None  # treat as all pages downstream
+    # 5) Summary + ability to select all / none for the whole doc (optional)
+    s1, s2, s3 = st.columns([2,2,6])
+    with s1:
+        if st.button("Select NONE (all pages)"):
+            st.session_state.selected_pages_set = set()
+    with s2:
+        if st.button("Select ALL (all pages)"):
+            st.session_state.selected_pages_set = set(range(1, n_pages + 1))
 
+    st.write(f"Selected: **{len(st.session_state.selected_pages_set)} / {n_pages}**")
+
+    # Build selected_pages list for processing
+    selected_pages = sorted(list(st.session_state.selected_pages_set))
+    if len(selected_pages) == 0:
+        st.info("No slides selected — generating from **all** slides.")
+        selected_pages = None
+
+# Generate
 if st.button("Generate Deck"):
     with st.spinner("Processing..."):
         status, result = process_pdf_and_generate_deck(
