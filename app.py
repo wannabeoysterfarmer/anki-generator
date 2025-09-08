@@ -219,7 +219,17 @@ if uploaded_pdf is not None:
         st.caption("Click the checkboxes below the slides you want. Selected slides glow with a border.")
 
         # 4-column grid
-        cols = st.columns(4)
+        cols = st.columns(3)
+        # Bulk select controls
+        col1, col2 = st.columns([1,1])
+        with col1:
+            if st.button("Uncheck All"):
+                for p, _ in thumbs:
+                    st.session_state[f"sel_{p}"] = False
+        with col2:
+            if st.button("Check All"):
+                for p, _ in thumbs:
+                    st.session_state[f"sel_{p}"] = True
         for idx, (pnum, img_path) in enumerate(thumbs):
             with cols[idx % 4]:
                 # checkbox state (default True = all selected to start)
