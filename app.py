@@ -240,32 +240,31 @@ selected_pages = None
 if uploaded_pdf is not None:
     pdf_bytes = uploaded_pdf.getvalue()
 
-    # 1) Cached thumbnails (MUCH faster on rerun)
+    # Cached thumbs (from earlier helper you added)
     thumbs = make_thumbnails_cached(pdf_bytes, dpi=90)
     n_pages = len(thumbs)
-    init_selection(n_pages)
+    init_selection(n_pages)  # default: all selected once per upload
 
     st.subheader("Select slides to include")
-    st.caption("Use the paginator. Click checkboxes and press **Apply selection**.")
+    st.caption("Selections apply instantly; paging won’t lose your choices.")
 
-    # 2) Pagination + thumbs/row (bigger thumbs → fewer per row)
-    colA, colB, colC = st.columns([2,2,3])
+    # Layout controls
+    colA, colB, colC = st.columns([2, 2, 3])
     with colA:
         thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
     with colB:
         page_size = st.selectbox("Slides per page", [8, 12, 15, 20, 30], index=2)
     with colC:
-        # compute total pages
         import math
         total_pages = math.ceil(n_pages / page_size)
         page_idx = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
 
     start = (page_idx - 1) * page_size
-    end = min(start + page_size, n_pages)
-    page_slice = thumbs[start:end]
+    end   = min(start + page_size, n_pages)
+    page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
 
-    # 3) Bulk controls for the *current* page only
-    c1, c2, _ = st.columns([1,1,6])
+    # Bulk controls (current page)
+    c1, c2, _ = st.columns([1, 1, 6])
     with c1:
         if st.button("Uncheck All (page)"):
             for pnum, _ in page_slice:
@@ -275,33 +274,25 @@ if uploaded_pdf is not None:
             for pnum, _ in page_slice:
                 st.session_state.selected_pages_set.add(pnum)
 
-    # 4) Selection grid inside a form → no re-render until submit
-    with st.form(key=f"selection_form_page_{page_idx}"):
-        # grid rows
-        for row_start in range(0, len(page_slice), thumbs_per_row):
-            row_items = page_slice[row_start: row_start + thumbs_per_row]
-            cols = st.columns(len(row_items))
-            for col, (pnum, png_bytes) in zip(cols, row_items):
-                with col:
-                    # show image bytes directly (faster than base64)
-                    st.image(png_bytes, caption=f"Slide {pnum}", use_container_width=True)
-                    key = f"sel_{pnum}"
-                    default_checked = (pnum in st.session_state.selected_pages_set)
-                    checked = st.checkbox("Select", value=default_checked, key=key)
-                    # we **don’t** modify the set yet; do it on submit below
-        apply_now = st.form_submit_button("Apply selection")
-
-        if apply_now:
-            # Read all checkboxes shown on this page and write back to the set once
-            for (pnum, _png) in page_slice:
+    # ---- GRID (no form; instant apply) ----
+    for row_start in range(0, len(page_slice), thumbs_per_row):
+        row_items = page_slice[row_start: row_start + thumbs_per_row]
+        cols = st.columns(len(row_items))
+        for col, (pnum, png_bytes) in zip(cols, row_items):
+            with col:
+                st.image(png_bytes, caption=f"Slide {pnum}", use_container_width=True)
                 key = f"sel_{pnum}"
-                if st.session_state.get(key, False):
+                # show current state
+                checked = st.session_state.selected_pages_set.__contains__(pnum)
+                new_val = st.checkbox("Select", value=checked, key=key)
+                # sync only this page’s boxes to the master set
+                if new_val:
                     st.session_state.selected_pages_set.add(pnum)
                 else:
                     st.session_state.selected_pages_set.discard(pnum)
 
-    # 5) Summary + ability to select all / none for the whole doc (optional)
-    s1, s2, s3 = st.columns([2,2,6])
+    # Global bulk actions (optional)
+    s1, s2, s3 = st.columns([2, 2, 6])
     with s1:
         if st.button("Select NONE (all pages)"):
             st.session_state.selected_pages_set = set()
@@ -309,28 +300,11 @@ if uploaded_pdf is not None:
         if st.button("Select ALL (all pages)"):
             st.session_state.selected_pages_set = set(range(1, n_pages + 1))
 
+    # Live summary
     st.write(f"Selected: **{len(st.session_state.selected_pages_set)} / {n_pages}**")
 
-    # Build selected_pages list for processing
-    selected_pages = sorted(list(st.session_state.selected_pages_set))
-    if len(selected_pages) == 0:
+    # Build final list
+    selected_pages = sorted(st.session_state.selected_pages_set)
+    if not selected_pages:
         st.info("No slides selected — generating from **all** slides.")
-        selected_pages = None
-
-# Generate
-if st.button("Generate Deck"):
-    with st.spinner("Processing..."):
-        status, result = process_pdf_and_generate_deck(
-            uploaded_file=uploaded_pdf,
-            max_cards_per_slide=max_cards,
-            selected_pages=selected_pages if uploaded_pdf else None,
-        )
-    st.write(status)
-    if result:
-        fname, data = result
-        st.download_button(
-            "Download Anki Deck (.apkg)",
-            data=data,
-            file_name=fname,
-            mime="application/octet-stream",
-        )
+        selected_pages = None  # downstream treats None as “all”
