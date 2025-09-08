@@ -4,30 +4,27 @@ import tempfile
 import random
 import hashlib
 from pathlib import Path
+import base64
 
 import streamlit as st
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
 
-# add at top with other imports
-import base64
-from functools import lru_cache
-
+# ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
 def _pdf_byteskey(pdf_bytes: bytes) -> str:
-    # small key so cache invalidates when pdf changes
     import hashlib
     return hashlib.sha1(pdf_bytes).hexdigest()
 
 @st.cache_data(show_spinner=False)
-def make_thumbnails_cached(pdf_bytes: bytes, dpi: int = 90) -> list[tuple[int, bytes]]:
+def make_thumbnails_cached(pdf_bytes: bytes, dpi: int = 90):
     """
     Return [(page_num, png_bytes)] for ALL pages.
     Cached by the content of the uploaded PDF.
     """
-    key = _pdf_byteskey(pdf_bytes)  # used implicitly by cache
     import io, fitz
+    _ = _pdf_byteskey(pdf_bytes)  # tie cache to bytes
     thumbs = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     for i, page in enumerate(doc, start=1):
@@ -37,13 +34,8 @@ def make_thumbnails_cached(pdf_bytes: bytes, dpi: int = 90) -> list[tuple[int, b
     return thumbs
 
 def init_selection(n_pages: int):
-    sel = st.session_state.get("selected_pages_set")
-    if sel is None:
+    if "selected_pages_set" not in st.session_state:
         st.session_state.selected_pages_set = set(range(1, n_pages + 1))  # default: all
-        
-def _img_b64(path: str) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
 
 # --- Optional OCR deps (safe import) ---
 try:
@@ -104,11 +96,11 @@ Slide:
             time.sleep(3)
     return []
 
-def extract_slides(pdf_path: str, image_dir: str, selected_pages: list[int] | None = None):
+def extract_slides(pdf_path: str, image_dir: str, selected_pages=None):
     """Return list of (slide_text, slide_image_path, page_num)."""
     doc = fitz.open(pdf_path)
     slides = []
-    page_indices = [(i+1) for i in range(len(doc))] if not selected_pages else selected_pages
+    page_indices = list(range(1, len(doc) + 1)) if not selected_pages else selected_pages
 
     for pnum in page_indices:
         page = doc[pnum - 1]
@@ -132,15 +124,6 @@ def extract_text_with_ocr(image_path: str) -> str:
         return (text or "").strip()
     except Exception:
         return ""
-
-def make_thumbnails_for_selection(pdf_path: str, tmpdir: str) -> list[tuple[int, str]]:
-    doc = fitz.open(pdf_path)
-    thumbs = []
-    for i, page in enumerate(doc, start=1):
-        img_path = os.path.join(tmpdir, f"thumb_{i}.png")
-        page.get_pixmap(dpi=100).save(img_path)
-        thumbs.append((i, img_path))
-    return thumbs
 
 def build_anki_deck(cards, deck_name: str) -> str:
     model_id = int(hashlib.md5("basic_qa_model".encode()).hexdigest(), 16) % (10**10)
@@ -181,7 +164,7 @@ def build_anki_deck(cards, deck_name: str) -> str:
 def process_pdf_and_generate_deck(
     uploaded_file,
     max_cards_per_slide: int = 1,
-    selected_pages: list[int] | None = None,
+    selected_pages=None,
 ):
     if uploaded_file is None:
         return "Please upload a PDF.", None
@@ -222,8 +205,7 @@ def process_pdf_and_generate_deck(
 
     return "Deck created successfully!", (deck_name + ".apkg", apkg_bytes)
 
-# ---- UI ----
-# ---- UI ----
+# ---------------- UI ----------------
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
 
@@ -238,12 +220,20 @@ max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step
 
 selected_pages = None
 if uploaded_pdf is not None:
+    # Cache thumbnails by *content* so UI is snappy on re-renders
     pdf_bytes = uploaded_pdf.getvalue()
+    pdf_key = _pdf_byteskey(pdf_bytes)
 
-    # Cached thumbs (from earlier helper you added)
-    thumbs = make_thumbnails_cached(pdf_bytes, dpi=90)
-    n_pages = len(thumbs)
-    init_selection(n_pages)  # default: all selected once per upload
+    # Reset selection set when a new PDF arrives
+    if st.session_state.get("pdf_key") != pdf_key:
+        st.session_state.pdf_key = pdf_key
+        thumbs = make_thumbnails_cached(pdf_bytes, dpi=100)  # a touch bigger previews
+        n_pages = len(thumbs)
+        st.session_state.selected_pages_set = set(range(1, n_pages + 1))
+    else:
+        thumbs = make_thumbnails_cached(pdf_bytes, dpi=100)
+        n_pages = len(thumbs)
+        init_selection(n_pages)
 
     st.subheader("Select slides to include")
     st.caption("Selections apply instantly; paging won’t lose your choices.")
@@ -256,14 +246,14 @@ if uploaded_pdf is not None:
         page_size = st.selectbox("Slides per page", [8, 12, 15, 20, 30], index=2)
     with colC:
         import math
-        total_pages = math.ceil(n_pages / page_size)
+        total_pages = math.ceil(n_pages / page_size) if page_size else 1
         page_idx = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
 
     start = (page_idx - 1) * page_size
     end   = min(start + page_size, n_pages)
     page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
 
-    # Bulk controls (current page)
+    # Bulk controls (current page only)
     c1, c2, _ = st.columns([1, 1, 6])
     with c1:
         if st.button("Uncheck All (page)"):
@@ -274,7 +264,7 @@ if uploaded_pdf is not None:
             for pnum, _ in page_slice:
                 st.session_state.selected_pages_set.add(pnum)
 
-    # ---- GRID (no form; instant apply) ----
+    # Grid (instant-apply)
     for row_start in range(0, len(page_slice), thumbs_per_row):
         row_items = page_slice[row_start: row_start + thumbs_per_row]
         cols = st.columns(len(row_items))
@@ -282,17 +272,15 @@ if uploaded_pdf is not None:
             with col:
                 st.image(png_bytes, caption=f"Slide {pnum}", use_container_width=True)
                 key = f"sel_{pnum}"
-                # show current state
-                checked = st.session_state.selected_pages_set.__contains__(pnum)
+                checked = (pnum in st.session_state.selected_pages_set)
                 new_val = st.checkbox("Select", value=checked, key=key)
-                # sync only this page’s boxes to the master set
                 if new_val:
                     st.session_state.selected_pages_set.add(pnum)
                 else:
                     st.session_state.selected_pages_set.discard(pnum)
 
     # Global bulk actions (optional)
-    s1, s2, s3 = st.columns([2, 2, 6])
+    s1, s2, _ = st.columns([2, 2, 6])
     with s1:
         if st.button("Select NONE (all pages)"):
             st.session_state.selected_pages_set = set()
@@ -300,11 +288,38 @@ if uploaded_pdf is not None:
         if st.button("Select ALL (all pages)"):
             st.session_state.selected_pages_set = set(range(1, n_pages + 1))
 
-    # Live summary
+    # Live summary + final list
     st.write(f"Selected: **{len(st.session_state.selected_pages_set)} / {n_pages}**")
-
-    # Build final list
     selected_pages = sorted(st.session_state.selected_pages_set)
     if not selected_pages:
         st.info("No slides selected — generating from **all** slides.")
         selected_pages = None  # downstream treats None as “all”
+
+# ---- Build Deck section (always visible so the button never disappears) ----
+st.divider()
+st.subheader("Build Deck")
+
+final_selected = sorted(st.session_state.selected_pages_set) if "selected_pages_set" in st.session_state else None
+if final_selected is not None and len(final_selected) == 0:
+    st.info("No slides selected — generating from **all** slides.")
+    final_selected = None  # None => all pages downstream
+
+if st.button("Generate Deck", key="btn_generate"):
+    if uploaded_pdf is None:
+        st.warning("Please upload a PDF first.")
+    else:
+        with st.spinner("Processing..."):
+            status, result = process_pdf_and_generate_deck(
+                uploaded_file=uploaded_pdf,
+                max_cards_per_slide=max_cards,
+                selected_pages=final_selected,
+            )
+        st.write(status)
+        if result:
+            fname, data = result
+            st.download_button(
+                "Download Anki Deck (.apkg)",
+                data=data,
+                file_name=fname,
+                mime="application/octet-stream"
+            )
