@@ -11,7 +11,6 @@ from genanki import Note, Model, Deck, Package
 from openai import OpenAI
 
 # --- Optional OCR deps (safe import) ---
-# If pytesseract/Pillow or tesseract binary aren't present, we keep running without OCR.
 try:
     from PIL import Image
     import pytesseract
@@ -29,7 +28,6 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---- Core logic ----
 def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
-    """Call OpenAI to make up to N Q/A pairs for a slide; returns list[(q, a)]."""
     prompt = f"""
 You are an expert tutor generating flashcards from lecture slides.
 
@@ -46,7 +44,7 @@ Slide:
     for _ in range(retries):
         try:
             res = client.chat.completions.create(
-                model="gpt-4o-mini",  # change if you prefer a different model
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
             )
@@ -71,27 +69,26 @@ Slide:
             time.sleep(3)
     return []
 
-def extract_slides(pdf_path: str, image_dir: str):
-    """Return list of (slide_text, slide_image_path)."""
+def extract_slides(pdf_path: str, image_dir: str, selected_pages: list[int] | None = None):
+    """Return list of (slide_text, slide_image_path, page_num)."""
     doc = fitz.open(pdf_path)
     slides = []
-    for i, page in enumerate(doc):
+    page_indices = [(i+1) for i in range(len(doc))] if not selected_pages else selected_pages
+
+    for pnum in page_indices:
+        page = doc[pnum - 1]
         text = (page.get_text() or "").strip()
-        img_path = os.path.join(image_dir, f"slide_{i+1}.png")
-        pix = page.get_pixmap(dpi=150)
-        pix.save(img_path)
-        slides.append((text, img_path))
+        img_path = os.path.join(image_dir, f"slide_{pnum}.png")
+        page.get_pixmap(dpi=150).save(img_path)
+        slides.append((text, img_path, pnum))
     return slides
 
 def extract_text_with_ocr(image_path: str) -> str:
-    """OCR the rendered slide image to recover text when PDF text is empty."""
     if not OCR_AVAILABLE:
         return ""
     try:
-        # Light preprocessing helps OCR a bit
         with Image.open(image_path) as im:
-            im = im.convert("L")  # grayscale
-            # Small upscale for tiny text
+            im = im.convert("L")
             w, h = im.size
             if max(w, h) < 1200:
                 scale = 1200 / max(w, h)
@@ -101,18 +98,25 @@ def extract_text_with_ocr(image_path: str) -> str:
     except Exception:
         return ""
 
+def make_thumbnails_for_selection(pdf_path: str, tmpdir: str) -> list[tuple[int, str]]:
+    doc = fitz.open(pdf_path)
+    thumbs = []
+    for i, page in enumerate(doc, start=1):
+        img_path = os.path.join(tmpdir, f"thumb_{i}.png")
+        page.get_pixmap(dpi=100).save(img_path)
+        thumbs.append((i, img_path))
+    return thumbs
+
 def build_anki_deck(cards, deck_name: str) -> str:
-    """cards: list[(q, a, image_path)] -> writes deck, returns file path."""
     model_id = int(hashlib.md5("basic_qa_model".encode()).hexdigest(), 16) % (10**10)
     model = Model(
         model_id,
         "Basic QA Model",
         fields=[{"name": "Front"}, {"name": "Back"}, {"name": "Extra"}],
-        # Put image ONLY on the answer (Extra is shown on back below Back)
         templates=[{
             "name": "Card 1",
             "qfmt": "{{Front}}",  # no image on question side
-            "afmt": "{{Front}}<hr id='answer'>{{Back}}<br>{{Extra}}",
+            "afmt": "{{Front}}<hr id='answer'>{{Back}}<br>{{Extra}}",  # image on back via Extra
         }],
     )
 
@@ -124,7 +128,6 @@ def build_anki_deck(cards, deck_name: str) -> str:
     for (q, a, img_path) in cards:
         extra_html = ""
         if img_path:
-            # Reference by basename; include full path in media_files
             extra_html = f"<br><img src='{Path(img_path).name}'>"
             media_files.append(img_path)
         note = Note(
@@ -140,8 +143,11 @@ def build_anki_deck(cards, deck_name: str) -> str:
     pkg.write_to_file(output_file)
     return output_file
 
-def process_pdf_and_generate_deck(uploaded_file, max_cards_per_slide: int = 1):
-    """Main pipeline: save PDF, render slides, call OpenAI, build deck, return bytes."""
+def process_pdf_and_generate_deck(
+    uploaded_file,
+    max_cards_per_slide: int = 1,
+    selected_pages: list[int] | None = None,
+):
     if uploaded_file is None:
         return "Please upload a PDF.", None
 
@@ -151,16 +157,18 @@ def process_pdf_and_generate_deck(uploaded_file, max_cards_per_slide: int = 1):
         with open(pdf_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
-        # Render slides to images + extract text
-        slides = extract_slides(pdf_path, tmpdir)
+        # Render slides (maybe only selected pages)
+        slides = extract_slides(pdf_path, tmpdir, selected_pages=selected_pages)
 
         # Generate cards
         anki_cards = []
-        for i, (text, image_path) in enumerate(slides, start=1):
+        for _, (text, image_path, _pnum) in enumerate(slides, start=1):
             if not text.strip():
-                # OCR fallback when the PDF page doesn't expose selectable text
                 ocr_text = extract_text_with_ocr(image_path)
-                text_for_model = ocr_text if ocr_text else "No readable text; infer a sensible question from typical med-school slide content (title, axes, labels are unreadable)."
+                text_for_model = (
+                    ocr_text if ocr_text
+                    else "No readable text; infer a sensible question from typical med-school slide content (title, axes, labels may be unreadable)."
+                )
             else:
                 text_for_model = text.strip()
 
@@ -187,11 +195,38 @@ if not OCR_AVAILABLE:
     st.info("OCR fallback not available. To enable OCR for image-only slides, add `pytesseract`, `Pillow` to requirements and `tesseract-ocr` to packages.")
 
 uploaded_pdf = st.file_uploader("Upload your lecture PDF", type=["pdf"])
+
+# ADD THE SLIDER BACK (this was missing)
 max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step=1)
+
+selected_pages = None
+if uploaded_pdf is not None:
+    with tempfile.TemporaryDirectory() as td_preview:
+        pdf_preview_path = os.path.join(td_preview, uploaded_pdf.name)
+        with open(pdf_preview_path, "wb") as f:
+            f.write(uploaded_pdf.getbuffer())
+
+        thumbs = make_thumbnails_for_selection(pdf_preview_path, td_preview)
+
+        st.subheader("Select slides to include")
+        st.caption("Tip: clear all to include **all** slides.")
+
+        cols = st.columns(4)
+        for idx, (pnum, img_path) in enumerate(thumbs):
+            with cols[idx % 4]:
+                st.image(img_path, caption=f"Slide {pnum}", use_column_width=True)
+
+        all_options = [p for p, _ in thumbs]
+        # If user clears all, you'll pass [] which your pipeline treats as "all pages"
+        selected_pages = st.multiselect("Slides to include", options=all_options, default=all_options)
 
 if st.button("Generate Deck"):
     with st.spinner("Processing..."):
-        status, result = process_pdf_and_generate_deck(uploaded_pdf, max_cards)
+        status, result = process_pdf_and_generate_deck(
+            uploaded_pdf,
+            max_cards_per_slide=max_cards,
+            selected_pages=selected_pages if uploaded_pdf else None,
+        )
     st.write(status)
     if result:
         fname, data = result
