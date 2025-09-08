@@ -195,15 +195,17 @@ def process_pdf_and_generate_deck(
     return "Deck created successfully!", (deck_name + ".apkg", apkg_bytes)
 
 # ---- UI ----
+# ---- UI ----
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
 
 if not OCR_AVAILABLE:
-    st.info("OCR fallback not available. To enable OCR for image-only slides, add `pytesseract`, `Pillow` to requirements and `tesseract-ocr` to packages.")
+    st.info(
+        "OCR fallback not available. To enable OCR for image-only slides, "
+        "add `pytesseract`, `Pillow` to requirements and install the `tesseract-ocr` package."
+    )
 
 uploaded_pdf = st.file_uploader("Upload your lecture PDF", type=["pdf"])
-
-# ADD THE SLIDER BACK (this was missing)
 max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step=1)
 
 selected_pages = None
@@ -216,38 +218,46 @@ if uploaded_pdf is not None:
         thumbs = make_thumbnails_for_selection(pdf_preview_path, td_preview)
 
         st.subheader("Select slides to include")
-        st.caption("Click the checkboxes below the slides you want. Selected slides glow with a border.")
+        st.caption("Click checkboxes under the slides you want. Selected slides show a teal border.")
 
-        # 4-column grid
-        cols = st.columns(3)
-        # Bulk select controls
-        col1, col2 = st.columns([1,1])
-        with col1:
+        # --- Bulk select controls
+        c1, c2, c3 = st.columns([1, 1, 6])
+        with c1:
             if st.button("Uncheck All"):
                 for p, _ in thumbs:
                     st.session_state[f"sel_{p}"] = False
-        with col2:
+        with c2:
             if st.button("Check All"):
                 for p, _ in thumbs:
+                    st.session_state.setdefault(f"sel_{p}", True)  # ensure key exists
                     st.session_state[f"sel_{p}"] = True
-        for idx, (pnum, img_path) in enumerate(thumbs):
-            with cols[idx % 4]:
-                # checkbox state (default True = all selected to start)
-                key = f"sel_{pnum}"
-                checked = st.checkbox(f"Slide {pnum}", value=True, key=key)
-                # dynamic border to show selection
-                border = "3px solid #10b981" if checked else "1px solid #3a3a3a"  # teal vs neutral
-                b64 = _img_b64(img_path)
-                st.markdown(
-                    f"""
-                    <div style="border:{border};border-radius:8px;padding:6px;margin-top:4px;">
-                      <img src="data:image/png;base64,{b64}" style="width:100%;border-radius:6px;" />
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
 
-        # Build selected_pages from the boxes
+        # --- Grid of thumbnails
+        THUMBS_PER_ROW = 3  # ← set to 2 for bigger thumbnails, 4 for smaller
+        for row_start in range(0, len(thumbs), THUMBS_PER_ROW):
+            row_thumbs = thumbs[row_start: row_start + THUMBS_PER_ROW]
+            cols = st.columns(len(row_thumbs))
+            for col, (pnum, img_path) in zip(cols, row_thumbs):
+                with col:
+                    key = f"sel_{pnum}"
+                    # default to True (selected) on first render
+                    if key not in st.session_state:
+                        st.session_state[key] = True
+                    checked = st.checkbox(f"Slide {pnum}", key=key)
+                    border = "3px solid #10b981" if checked else "1px solid #3a3a3a"
+
+                    # Convert image to base64 for consistent sizing/border
+                    b64 = _img_b64(img_path)  # ← make sure this helper exists in your file
+                    st.markdown(
+                        f"""
+                        <div style="border:{border};border-radius:8px;padding:6px;margin-top:4px;">
+                          <img src="data:image/png;base64,{b64}" style="width:100%;border-radius:6px;" />
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+        # Build selected_pages list from session_state
         selected_pages = [p for p, _ in thumbs if st.session_state.get(f"sel_{p}", False)]
         if len(selected_pages) == 0:
             st.info("No slides selected — generating from **all** slides.")
@@ -256,11 +266,16 @@ if uploaded_pdf is not None:
 if st.button("Generate Deck"):
     with st.spinner("Processing..."):
         status, result = process_pdf_and_generate_deck(
-            uploaded_pdf,
+            uploaded_file=uploaded_pdf,
             max_cards_per_slide=max_cards,
             selected_pages=selected_pages if uploaded_pdf else None,
         )
     st.write(status)
     if result:
         fname, data = result
-        st.download_button("Download Anki Deck (.apkg)", data=data, file_name=fname, mime="application/octet-stream")
+        st.download_button(
+            "Download Anki Deck (.apkg)",
+            data=data,
+            file_name=fname,
+            mime="application/octet-stream",
+        )
