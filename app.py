@@ -13,29 +13,16 @@ from openai import OpenAI
 import re
 
 # ---------------- Bullet Markdown Method ----------------
-def convert_markdown_bullets_to_html(md_text: str) -> str:
-    """Convert markdown bullets to proper <ul><li> HTML list."""
-    import html
-    lines = md_text.strip().split("\n")
-    html_lines = []
-    in_list = False
-
-    for line in lines:
-        if line.strip().startswith("- "):
-            if not in_list:
-                html_lines.append("<ul>")
-                in_list = True
-            content = html.escape(line.strip()[2:].strip())
-            html_lines.append(f"<li>{content}</li>")
-        else:
-            if in_list:
-                html_lines.append("</ul>")
-                in_list = False
-            if line.strip():
-                html_lines.append(f"<p>{html.escape(line.strip())}</p>")
-    if in_list:
-        html_lines.append("</ul>")
-    return "\n".join(html_lines)
+def format_bullets_as_html(answer: str) -> str:
+    """
+    Converts markdown-style bullet list to proper HTML <ul><li> list.
+    """
+    lines = answer.strip().split("\n")
+    bullets = [line.strip()[2:].strip() for line in lines if line.strip().startswith("- ")]
+    if bullets:
+        return "<ul>" + "".join(f"<li>{line}</li>" for line in bullets) + "</ul>"
+    else:
+        return answer.strip()
     
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
@@ -183,7 +170,7 @@ def build_anki_deck(cards, deck_name: str) -> str:
         if img_path:
             extra_html = f"<br><img src='{Path(img_path).name}'>"
             media_files.append(img_path)
-        formatted_answer = convert_markdown_bullets_to_html(a)
+        formatted_answer = format_bullets_as_html(a)
         note = Note(
             model=model,
             fields=[q, formatted_answer, extra_html],
