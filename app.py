@@ -265,7 +265,7 @@ if uploaded_pdf is not None:
     # page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
   
     # Layout controls
-    thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
+    thumbs_per_row = 3 #st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
 
     page_slice = thumbs  # Show all thumbnails
 
