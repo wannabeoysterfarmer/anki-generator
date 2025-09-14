@@ -206,7 +206,7 @@ def process_pdf_and_generate_deck(
     return "Deck created successfully!", (deck_name + ".apkg", apkg_bytes)
 
 # ---------------- UI ----------------
-st.set_page_config(page_title="Decksmith", page_icon="⚔️")
+st.set_page_config(page_title="Decksmith     ", page_icon="⚒️")
 st.title("Introducing: Decksmith ⚒️ ")
 st.title("Your all in one PDF → Anki Deck Generator 🔥🔥🔥")
 st.markdown("""
