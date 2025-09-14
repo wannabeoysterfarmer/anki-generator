@@ -10,21 +10,7 @@ import streamlit as st
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
-import re
 
-# ---------------- Bullet Markdown Method ----------------
-def format_bullets_as_html(answer: str) -> str:
-    lines = answer.strip().split("\n")
-    bullets = [line.strip()[2:].strip() for line in lines if line.strip().startswith("- ")]
-    if bullets:
-        return (
-            "<ul style='margin: 0; padding-left: 20px;'>"
-            + "".join(f"<li style='margin-bottom: 4px;'>{line}</li>" for line in bullets)
-            + "</ul>"
-        )
-    else:
-        return answer.strip()
-    
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
 def _pdf_byteskey(pdf_bytes: bytes) -> str:
@@ -72,20 +58,12 @@ def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
     prompt = f"""
 You are an expert tutor generating flashcards from lecture slides.
 
-Your task is to write up to {max_cards} concise, high-yield flashcards from the slide content below.
+Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
 
-Each flashcard must follow this exact format:
+Q: What is the question?
+A: An accurate, tightened, scientifically-backed explanation for effective studying.
 
-Q: [Clear, fact-testing question]  
-A: Use bullet points, one per line. Each must begin with "- " and be on its own line:
-
-- First concise point  
-- Second concise point  
-- Third concise point
-
-⚠️ DO NOT use paragraphs, wrap bullets in full sentences, or combine multiple bullets on one line.  
-⚠️ DO NOT include extra explanations, summaries, intros, or closings.  
-✅ Just return the Q: and A: blocks, formatted **exactly** as shown.
+Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
 
 Slide:
 \"\"\"{slide_text}\"\"\"
@@ -170,10 +148,9 @@ def build_anki_deck(cards, deck_name: str) -> str:
         if img_path:
             extra_html = f"<br><img src='{Path(img_path).name}'>"
             media_files.append(img_path)
-        formatted_answer = format_bullets_as_html(a)
         note = Note(
             model=model,
-            fields=[q, formatted_answer, extra_html],
+            fields=[q, a, extra_html],
             tags=["autogen"],
             guid=str(hash((q, a))),
         )
@@ -231,17 +208,6 @@ def process_pdf_and_generate_deck(
 # ---------------- UI ----------------
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
-st.markdown("""
-### How to Use Decksmith
-
-1. Upload a lecture PDF.
-2. Select which slides you want included.
-3. Choose how many cards per slide.
-4. Click **Generate Deck** to create your Anki file.
-5. When finished, download the deck and **refresh the page** before uploading another PDF.
-
-⚠️ Decksmith currently supports one upload at a time. Please refresh between sessions to reset the app.
-""")
 
 if not OCR_AVAILABLE:
     st.info(
