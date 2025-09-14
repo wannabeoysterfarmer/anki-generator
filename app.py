@@ -56,22 +56,14 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # ---- Core logic ----
 def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
     prompt = f"""
-You are an expert tutor generating high-yield flashcards from medical lecture slides.
+You are an expert tutor generating flashcards from lecture slides.
 
-Your task is to generate up to {max_cards} Anki flashcards in this format:
+Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
 
-Q: [Concise fact-testing question]  
-A: Each answer should be a list of bullet points using "- " and a new line per bullet:
+Q: What is the question?
+A: An accurate, tightened, scientifically-backed explanation for effective studying.
 
-Example:
-- Long half-life of Drug X (t½ = 18 hrs)  
-- Infusion rate increased 4x  
-- Toxic levels reached within 48 hrs
-
-⚠️ Important:
-- Each bullet must start on a new line, with "- " (hyphen + space)  
-- DO NOT use paragraphs or inline lists  
-- NO explanations, intros, or summaries — only clean Q/A flashcards
+Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
 
 Slide:
 \"\"\"{slide_text}\"\"\"
@@ -216,6 +208,17 @@ def process_pdf_and_generate_deck(
 # ---------------- UI ----------------
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
+st.markdown("""
+### How to Use Decksmith
+
+1. Upload a lecture PDF.
+2. Select which slides you want included.
+3. Choose how many cards per slide.
+4. Click **Generate Deck** to create your Anki file.
+5. When finished, download the deck and **refresh the page** before uploading another PDF.
+
+⚠️ Decksmith currently supports one upload at a time. Please refresh between sessions to reset the app.
+""")
 
 if not OCR_AVAILABLE:
     st.info(
@@ -247,7 +250,7 @@ if uploaded_pdf is not None:
     st.caption("Selections apply instantly; paging won’t lose your choices.")
 
     # Layout controls
-    colA, colB, colC = st.columns([2, 2, 3])
+   ''' colA, colB, colC = st.columns([2, 2, 3])
     with colA:
         thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
     with colB:
@@ -260,6 +263,11 @@ if uploaded_pdf is not None:
     start = (page_idx - 1) * page_size
     end   = min(start + page_size, n_pages)
     page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
+'''
+    # Layout controls
+    thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
+
+    page_slice = thumbs  # Show all thumbnails
 
     # Bulk controls (current page only)
     c1, c2, _ = st.columns([1, 1, 6])
