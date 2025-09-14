@@ -14,13 +14,14 @@ import re
 
 # ---------------- Bullet Markdown Method ----------------
 def format_bullets_as_html(answer: str) -> str:
-    """
-    Converts markdown-style bullet list to proper HTML <ul><li> list.
-    """
     lines = answer.strip().split("\n")
     bullets = [line.strip()[2:].strip() for line in lines if line.strip().startswith("- ")]
     if bullets:
-        return "<ul>" + "".join(f"<li>{line}</li>" for line in bullets) + "</ul>"
+        return (
+            "<ul style='margin: 0; padding-left: 20px;'>"
+            + "".join(f"<li style='margin-bottom: 4px;'>{line}</li>" for line in bullets)
+            + "</ul>"
+        )
     else:
         return answer.strip()
     
@@ -73,19 +74,18 @@ You are an expert tutor generating flashcards from lecture slides.
 
 Your task is to write up to {max_cards} concise, high-yield flashcards from the slide content below.
 
-Each flashcard must follow this format:
+Each flashcard must follow this exact format:
 
 Q: [Clear, fact-testing question]  
-A: [Concise bullet-point answer — use ONLY bullet points if multiple elements are involved]
+A: Use bullet points, one per line. Each must begin with "- " and be on its own line:
 
-Use clean markdown-style bullets like:
-- Long half-life of Drug X (t½ = 18 hrs)
-- Infusion increased 4-fold
-- Toxic levels reached within 48 hrs
+- First concise point  
+- Second concise point  
+- Third concise point
 
-Do not wrap the bullets in explanations or full sentences.  
-Do not add summaries or closers.  
-Just return the Q and A blocks, nothing else.
+⚠️ DO NOT use paragraphs, wrap bullets in full sentences, or combine multiple bullets on one line.  
+⚠️ DO NOT include extra explanations, summaries, intros, or closings.  
+✅ Just return the Q: and A: blocks, formatted **exactly** as shown.
 
 Slide:
 \"\"\"{slide_text}\"\"\"
