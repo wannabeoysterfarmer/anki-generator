@@ -227,6 +227,15 @@ if not OCR_AVAILABLE:
     )
 
 uploaded_pdf = st.file_uploader("Upload your lecture PDF", type=["pdf"])
+
+st.markdown("""
+#### 🎯 Recommended:
+We suggest generating **only 1–2 cards per slide**.
+
+This keeps your deck **focused**, avoids unnecessary repetition, and helps you retain key concepts more efficiently.  
+You can always edit or expand the cards afterward to match your learning style.
+""")
+
 max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=1, step=1)
 
 selected_pages = None
