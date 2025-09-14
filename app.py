@@ -56,14 +56,22 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # ---- Core logic ----
 def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
     prompt = f"""
-You are an expert tutor generating flashcards from lecture slides.
+You are an expert tutor generating high-yield flashcards from medical lecture slides.
 
-Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
+Your task is to generate up to {max_cards} Anki flashcards in this format:
 
-Q: What is the question?
-A: An accurate, tightened, scientifically-backed explanation for effective studying.
+Q: [Concise fact-testing question]  
+A: Each answer should be a list of bullet points using "- " and a new line per bullet:
 
-Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
+Example:
+- Long half-life of Drug X (t½ = 18 hrs)  
+- Infusion rate increased 4x  
+- Toxic levels reached within 48 hrs
+
+⚠️ Important:
+- Each bullet must start on a new line, with "- " (hyphen + space)  
+- DO NOT use paragraphs or inline lists  
+- NO explanations, intros, or summaries — only clean Q/A flashcards
 
 Slide:
 \"\"\"{slide_text}\"\"\"
