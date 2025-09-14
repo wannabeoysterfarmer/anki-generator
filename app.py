@@ -250,20 +250,20 @@ if uploaded_pdf is not None:
     st.caption("Selections apply instantly; paging won’t lose your choices.")
 
     # Layout controls
-   ''' colA, colB, colC = st.columns([2, 2, 3])
-    with colA:
-        thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
-    with colB:
-        page_size = st.selectbox("Slides per page", [8, 12, 15, 20, 30], index=2)
-    with colC:
-        import math
-        total_pages = math.ceil(n_pages / page_size) if page_size else 1
-        page_idx = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-
-    start = (page_idx - 1) * page_size
-    end   = min(start + page_size, n_pages)
-    page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
-'''
+    # colA, colB, colC = st.columns([2, 2, 3])
+    # with colA:
+    #     thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
+    # with colB:
+    #     page_size = st.selectbox("Slides per page", [8, 12, 15, 20, 30], index=2)
+    # with colC:
+    #    import math
+    #     total_pages = math.ceil(n_pages / page_size) if page_size else 1
+    #     page_idx = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+    # 
+    # start = (page_idx - 1) * page_size
+    # end   = min(start + page_size, n_pages)
+    # page_slice = thumbs[start:end]  # [(pnum, png_bytes), ...]
+  
     # Layout controls
     thumbs_per_row = st.selectbox("Thumbnails per row", [2, 3, 4], index=1)
 
