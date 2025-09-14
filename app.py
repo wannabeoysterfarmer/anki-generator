@@ -10,7 +10,30 @@ import streamlit as st
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
+import re
 
+# ---------------- Bullet Markdown Method ----------------
+def convert_markdown_bullets_to_html(md_text: str) -> str:
+    """Convert markdown-style bullets into <ul><li> HTML."""
+    lines = md_text.strip().split("\n")
+    html_lines = []
+    in_list = False
+
+    for line in lines:
+        if re.match(r"^- ", line):
+            if not in_list:
+                html_lines.append("<ul>")
+                in_list = True
+            item = line[2:].strip()
+            html_lines.append(f"<li>{item}</li>")
+        else:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(line.strip())
+    if in_list:
+        html_lines.append("</ul>")
+    return "<br>".join(html_lines)
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
 def _pdf_byteskey(pdf_bytes: bytes) -> str:
@@ -58,12 +81,14 @@ def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
     prompt = f"""
 You are an expert tutor generating flashcards from lecture slides.
 
-Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
+Your task is to write up to {max_cards} high-yield flashcards based on the content below. Follow this format exactly:
 
-Q: What is the question?
-A: A concise, high-yield answer. If the answer includes multiple elements, list them using bullet points (use - for bullets). Be factual, brief, and clear.
+Q: [Question goes here]  
+A: [Answer goes here — write concisely. Use bullet points if there are multiple elements.]
 
-Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
+Use bullet points if the answer includes multiple facts, mechanisms, or list items. Use markdown bullets (`- item`). Avoid full-sentence lists like "The causes are X, Y, and Z." Just list them.
+
+Do **not** use cloze deletions. Focus on key mechanisms, not trivia.
 
 Slide:
 \"\"\"{slide_text}\"\"\"
@@ -148,9 +173,10 @@ def build_anki_deck(cards, deck_name: str) -> str:
         if img_path:
             extra_html = f"<br><img src='{Path(img_path).name}'>"
             media_files.append(img_path)
+        formatted_answer = convert_markdown_bullets_to_html(a)
         note = Note(
             model=model,
-            fields=[q, a, extra_html],
+            fields=[q, formatted_answer, extra_html],
             tags=["autogen"],
             guid=str(hash((q, a))),
         )
