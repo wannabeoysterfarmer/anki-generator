@@ -278,7 +278,7 @@ if uploaded_pdf is not None:
     page_slice = thumbs  # Show all thumbnails
 
     # Bulk controls (current page only)
-    c1, c2, _ = st.columns([3, 3, 4])
+    c1, c2, _ = st.columns([2, 2, 6])
     with c1:
         if st.button("Uncheck All (page)"):
             for pnum, _ in page_slice:
