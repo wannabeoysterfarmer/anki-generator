@@ -14,26 +14,29 @@ import re
 
 # ---------------- Bullet Markdown Method ----------------
 def convert_markdown_bullets_to_html(md_text: str) -> str:
-    """Convert markdown-style bullets into <ul><li> HTML."""
+    """Convert markdown bullets to proper <ul><li> HTML list."""
+    import html
     lines = md_text.strip().split("\n")
     html_lines = []
     in_list = False
 
     for line in lines:
-        if re.match(r"^- ", line):
+        if line.strip().startswith("- "):
             if not in_list:
                 html_lines.append("<ul>")
                 in_list = True
-            item = line[2:].strip()
-            html_lines.append(f"<li>{item}</li>")
+            content = html.escape(line.strip()[2:].strip())
+            html_lines.append(f"<li>{content}</li>")
         else:
             if in_list:
                 html_lines.append("</ul>")
                 in_list = False
-            html_lines.append(line.strip())
+            if line.strip():
+                html_lines.append(f"<p>{html.escape(line.strip())}</p>")
     if in_list:
         html_lines.append("</ul>")
-    return "<br>".join(html_lines)
+    return "\n".join(html_lines)
+    
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
 def _pdf_byteskey(pdf_bytes: bytes) -> str:
@@ -81,14 +84,21 @@ def generate_qa_cards(slide_text: str, max_cards: int = 1, retries: int = 3):
     prompt = f"""
 You are an expert tutor generating flashcards from lecture slides.
 
-Your task is to write up to {max_cards} high-yield flashcards based on the content below. Follow this format exactly:
+Your task is to write up to {max_cards} concise, high-yield flashcards from the slide content below.
 
-Q: [Question goes here]  
-A: [Answer goes here — write concisely. Use bullet points if there are multiple elements.]
+Each flashcard must follow this format:
 
-Use bullet points if the answer includes multiple facts, mechanisms, or list items. Use markdown bullets (`- item`). Avoid full-sentence lists like "The causes are X, Y, and Z." Just list them.
+Q: [Clear, fact-testing question]  
+A: [Concise bullet-point answer — use ONLY bullet points if multiple elements are involved]
 
-Do **not** use cloze deletions. Focus on key mechanisms, not trivia.
+Use clean markdown-style bullets like:
+- Long half-life of Drug X (t½ = 18 hrs)
+- Infusion increased 4-fold
+- Toxic levels reached within 48 hrs
+
+Do not wrap the bullets in explanations or full sentences.  
+Do not add summaries or closers.  
+Just return the Q and A blocks, nothing else.
 
 Slide:
 \"\"\"{slide_text}\"\"\"
