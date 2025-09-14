@@ -61,7 +61,7 @@ You are an expert tutor generating flashcards from lecture slides.
 Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
 
 Q: What is the question?
-A: An accurate, tightened, scientifically-backed explanation for effective studying.
+A: A concise, high-yield answer. If the answer includes multiple elements, list them using bullet points (use - for bullets). Be factual, brief, and clear.
 
 Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
 
@@ -208,6 +208,17 @@ def process_pdf_and_generate_deck(
 # ---------------- UI ----------------
 st.set_page_config(page_title="PDF → Anki Deck", page_icon="📚")
 st.title("📚 PDF → Anki Deck Generator")
+st.markdown("""
+### How to Use Decksmith
+
+1. Upload a lecture PDF.
+2. Select which slides you want included.
+3. Choose how many cards per slide.
+4. Click **Generate Deck** to create your Anki file.
+5. When finished, download the deck and **refresh the page** before uploading another PDF.
+
+⚠️ Decksmith currently supports one upload at a time. Please refresh between sessions to reset the app.
+""")
 
 if not OCR_AVAILABLE:
     st.info(
