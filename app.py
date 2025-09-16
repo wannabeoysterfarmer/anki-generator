@@ -387,6 +387,12 @@ if uploaded_pdf is not None:
         selected_pages = None  # downstream treats None as “all”
 
 # ---- Build Deck section (always visible so the button never disappears) ----
+st.markdown("""
+### ✅ Generate Your Deck:
+
+Once you finish selecting the slides you'd like to convert into Anki flashcards,  
+click the **Generate Deck** button below. After a couple minutes, you'll see a **download link** to get your `.apkg` deck file.
+""")
 st.divider()
 st.subheader("Build Deck")
 
