@@ -5,3 +5,5 @@ genanki==0.13.1
 pillow
 pytesseract
 python-dotenv
+gspread
+oauth2client
