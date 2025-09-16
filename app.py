@@ -8,13 +8,19 @@ import base64
 from streamlit_cookies_manager import EncryptedCookieManager
 import streamlit as st
 import uuid
+import time
 cookies = EncryptedCookieManager(
     prefix="decksmith_",
     password=st.secrets["cookie_password"]
 )
 
-if not cookies.ready():
-    st.warning("Cookies not ready. Refresh the app.")
+# ✅ Retry loop here to wait for readiness
+for _ in range(5):
+    if cookies.ready():
+        break
+    time.sleep(0.2)
+else:
+    st.warning("⚠️ Cookies not ready — try refreshing.")
     st.stop()
 
 try:
