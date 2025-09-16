@@ -5,27 +5,28 @@ import random
 import hashlib
 from pathlib import Path
 import base64
+from streamlit_cookies_manager import EncryptedCookieManager
 import streamlit as st
 import uuid
-from streamlit_cookies_manager import EncryptedCookieManager
-
-# Setup cookie manager
 cookies = EncryptedCookieManager(
     prefix="decksmith_",
     password=st.secrets["cookie_password"]
 )
 
 if not cookies.ready():
+    st.warning("Cookies not ready. Refresh the app.")
     st.stop()
 
-# Set or retrieve persistent user ID
-if not cookies.get("user_id"):
-    user_id = str(uuid.uuid4())[:8]
-    cookies.set("user_id", user_id)
-else:
-    user_id = cookies.get("user_id")
-
-cookies.save()
+try:
+    if not cookies.get("user_id"):
+        user_id = str(uuid.uuid4())[:8]
+        cookies.set("user_id", user_id)
+        cookies.save()
+    else:
+        user_id = cookies.get("user_id")
+except Exception as e:
+    st.warning(f"⚠️ Cookie error: {e}")
+    user_id = "unknown"
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
