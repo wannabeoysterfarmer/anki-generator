@@ -6,6 +6,26 @@ import hashlib
 from pathlib import Path
 import base64
 import streamlit as st
+import uuid
+from streamlit_cookies_manager import EncryptedCookieManager
+
+# Setup cookie manager
+cookies = EncryptedCookieManager(
+    prefix="decksmith_",
+    password=st.secrets["cookie_password"]
+)
+
+if not cookies.ready():
+    st.stop()
+
+# Set or retrieve persistent user ID
+if not cookies.get("user_id"):
+    user_id = str(uuid.uuid4())[:8]
+    cookies.set("user_id", user_id)
+else:
+    user_id = cookies.get("user_id")
+
+cookies.save()
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
@@ -13,7 +33,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from streamlit.runtime.scriptrunner import get_script_run_ctx
-import uuid
 
 # ---------------- Google Drive Data Storage and Analytics ----------------
 scope = [
@@ -186,14 +205,10 @@ def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards):
         #ip_address = ctx.remote_ip if ctx and hasattr(ctx, "remote_ip") else "unknown"
        
         # Simulate a persistent user ID using Streamlit session or a UUID fallback
-        user_id = st.session_state.get("user_id")
-        if not user_id:
-            user_id = str(uuid.uuid4())[:8]
-            st.session_state.user_id = user_id
-
+        # Use persistent user_id from cookie
         sheet.append_row([
             datetime.utcnow().isoformat(),  # Timestamp
-            user_id,                  # Simulated user ID (not IP)
+            user_id,                        # Persistent user ID
             len(final_selected) if final_selected else "unknown",  # Slide count
             num_cards,                      # Total number of cards
             uploaded_file.name              # PDF file name
