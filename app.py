@@ -279,8 +279,8 @@ st.markdown("""
 ### 👉 Instructions: 
 
 1. Upload a lecture PDF.
-2. Select which slides you want included.
-3. Choose how many cards per slide.
+2. Once the slides load, select which slides you want included.
+3. Choose how many Anki cards per slide.
 4. Click **Generate Deck** to create your Anki file.
 5. When finished, download the deck and **refresh the page** before uploading another PDF.
 
