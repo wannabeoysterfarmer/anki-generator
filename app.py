@@ -5,15 +5,14 @@ import random
 import hashlib
 from pathlib import Path
 import base64
-
 import streamlit as st
 import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
-
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 # ---------------- Google Drive Data Storage and Analytics ----------------
 scope = [
@@ -181,11 +180,16 @@ def build_anki_deck(cards, deck_name: str) -> str:
 # ---------------- Google Drive Data Storage and Analytics Logging Function ----------------
 def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards):
     try:
+        # Get user's IP address (unofficial API; works on Streamlit Cloud + local)
+        ctx = get_script_run_ctx()
+        ip_address = ctx.remote_ip if ctx and hasattr(ctx, "remote_ip") else "unknown"
+
         sheet.append_row([
             datetime.utcnow().isoformat(),  # Timestamp
-            uploaded_file.name,             # Original PDF name
-            deck_name,                      # Final deck name
-            num_cards                       # Total number of cards generated
+            ip_address,                     # IP address
+            len(final_selected) if final_selected else "unknown",  # Slide count
+            num_cards,                      # Total number of cards
+            uploaded_file.name              # PDF file name
         ])
     except Exception as e:
         st.warning(f"⚠️ Failed to log analytics: {e}")
@@ -194,6 +198,7 @@ def process_pdf_and_generate_deck(
     uploaded_file,
     max_cards_per_slide: int = 1,
     selected_pages=None,
+    final_selected=None,  
 ):
     if uploaded_file is None:
         return "Please upload a PDF.", None
@@ -370,6 +375,7 @@ if st.button("Generate Deck", key="btn_generate"):
                 uploaded_file=uploaded_pdf,
                 max_cards_per_slide=max_cards,
                 selected_pages=final_selected,
+                final_selected=final_selected  
             )
         st.write(status)
         if result:
