@@ -13,6 +13,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 from streamlit.runtime.scriptrunner import get_script_run_ctx
+import uuid
 
 # ---------------- Google Drive Data Storage and Analytics ----------------
 scope = [
@@ -181,12 +182,18 @@ def build_anki_deck(cards, deck_name: str) -> str:
 def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards):
     try:
         # Get user's IP address (unofficial API; works on Streamlit Cloud + local)
-        ctx = get_script_run_ctx()
-        ip_address = ctx.remote_ip if ctx and hasattr(ctx, "remote_ip") else "unknown"
+        #ctx = get_script_run_ctx()
+        #ip_address = ctx.remote_ip if ctx and hasattr(ctx, "remote_ip") else "unknown"
+       
+        # Simulate a persistent user ID using Streamlit session or a UUID fallback
+        user_id = st.session_state.get("user_id")
+        if not user_id:
+            user_id = str(uuid.uuid4())[:8]
+            st.session_state.user_id = user_id
 
         sheet.append_row([
             datetime.utcnow().isoformat(),  # Timestamp
-            ip_address,                     # IP address
+            user_id,                  # Simulated user ID (not IP)
             len(final_selected) if final_selected else "unknown",  # Slide count
             num_cards,                      # Total number of cards
             uploaded_file.name              # PDF file name
