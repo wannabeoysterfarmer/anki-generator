@@ -11,6 +11,23 @@ import fitz  # PyMuPDF
 from genanki import Note, Model, Deck, Package
 from openai import OpenAI
 
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
+
+# ---------------- Google Drive Data Storage and Analytics ----------------
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+
+creds = Credentials.from_service_account_info(
+    st.secrets["google_service_account"], scopes=scope
+)
+
+gc = gspread.authorize(creds)
+sheet = gc.open("Decksmith Analytics").sheet1
+
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
 def _pdf_byteskey(pdf_bytes: bytes) -> str:
@@ -161,6 +178,18 @@ def build_anki_deck(cards, deck_name: str) -> str:
     pkg.write_to_file(output_file)
     return output_file
 
+# ---------------- Google Drive Data Storage and Analytics Logging Function ----------------
+def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards):
+    try:
+        sheet.append_row([
+            datetime.utcnow().isoformat(),  # Timestamp
+            uploaded_file.name,             # Original PDF name
+            deck_name,                      # Final deck name
+            num_cards                       # Total number of cards generated
+        ])
+    except Exception as e:
+        st.warning(f"⚠️ Failed to log analytics: {e}")
+
 def process_pdf_and_generate_deck(
     uploaded_file,
     max_cards_per_slide: int = 1,
@@ -199,6 +228,9 @@ def process_pdf_and_generate_deck(
 
         deck_name = f"{Path(pdf_path).stem} - Generated Anki Deck"
         apkg_path = build_anki_deck(anki_cards, deck_name)
+        
+        # Log to analytics sheet
+        log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, len(anki_cards))
 
         with open(apkg_path, "rb") as f:
             apkg_bytes = f.read()
