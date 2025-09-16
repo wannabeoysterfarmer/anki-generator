@@ -18,12 +18,12 @@ if not cookies.ready():
     st.stop()
 
 try:
-    if not cookies.get("user_id"):
+    if "user_id" not in cookies:
         user_id = str(uuid.uuid4())[:8]
-        cookies.set("user_id", user_id)
+        cookies["user_id"] = user_id
         cookies.save()
     else:
-        user_id = cookies.get("user_id")
+        user_id = cookies["user_id"]
 except Exception as e:
     st.warning(f"⚠️ Cookie error: {e}")
     user_id = "unknown"
