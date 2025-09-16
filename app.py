@@ -276,7 +276,7 @@ st.set_page_config(page_title="Decksmith     ", page_icon="⚒️")
 st.title("Introducing: Decksmith ⚒️ ")
 st.title("Your all in one PDF → Anki Deck Generator ⭐ ")
 st.markdown("""
-### How to Use Decksmith
+### 👉 Instructions: 
 
 1. Upload a lecture PDF.
 2. Select which slides you want included.
@@ -388,7 +388,7 @@ if uploaded_pdf is not None:
 
 # ---- Build Deck section (always visible so the button never disappears) ----
 st.markdown("""
-### ✅ Generate Your Deck:
+### 🚀 Generate Your Deck:
 
 Once you finish selecting the slides you'd like to convert into Anki flashcards,  
 click the **Generate Deck** button below. After a couple minutes, you'll see a **download link** to get your `.apkg` deck file.
