@@ -7,3 +7,4 @@ pytesseract
 python-dotenv
 gspread
 oauth2client
+streamlit-cookies-manager
