@@ -274,7 +274,7 @@ def process_pdf_and_generate_deck(
 # ---------------- UI ----------------
 st.set_page_config(page_title="Decksmith     ", page_icon="⚒️")
 st.title("Introducing: Decksmith ⚒️ ")
-st.title("Your all in one PDF → Anki Deck Generator! ⭐ ")
+st.title("Your all in one PDF → Anki Deck Generator ⭐ ")
 st.markdown("""
 ### How to Use Decksmith
 
