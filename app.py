@@ -232,7 +232,7 @@ def process_pdf_and_generate_deck(
     if uploaded_file is None:
         return "Please upload a PDF.", None
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(prefix=f"decksmith_{uuid.uuid4()}_") as tmpdir:
         # Save uploaded PDF
         pdf_path = os.path.join(tmpdir, uploaded_file.name)
         with open(pdf_path, "wb") as f:
