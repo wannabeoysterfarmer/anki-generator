@@ -7,7 +7,6 @@ from pathlib import Path
 import base64
 from streamlit_cookies_manager import EncryptedCookieManager
 import streamlit as st
-st.cache_data.clear()
 import uuid
 import time
 cookies = EncryptedCookieManager(
