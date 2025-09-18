@@ -61,13 +61,13 @@ def _pdf_byteskey(pdf_bytes: bytes) -> str:
     return hashlib.sha1(pdf_bytes).hexdigest()
 
 @st.cache_data(show_spinner=False)
-def make_thumbnails_cached(pdf_bytes: bytes, dpi: int = 90):
+def make_thumbnails_cached(pdf_bytes: bytes, pdf_hash: str, dpi: int = 90):
     """
     Return [(page_num, png_bytes)] for ALL pages.
     Cached by the content of the uploaded PDF.
     """
     import io, fitz
-    _ = _pdf_byteskey(pdf_bytes)  # tie cache to bytes
+    #_ = _pdf_byteskey(pdf_bytes)  # tie cache to bytes
     thumbs = []
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     for i, page in enumerate(doc, start=1):
@@ -313,11 +313,13 @@ if uploaded_pdf is not None:
     # Reset selection set when a new PDF arrives
     if st.session_state.get("pdf_key") != pdf_key:
         st.session_state.pdf_key = pdf_key
-        thumbs = make_thumbnails_cached(pdf_bytes, dpi=100)  # a touch bigger previews
+        pdf_hash = _pdf_byteskey(pdf_bytes)
+        thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
         n_pages = len(thumbs)
         st.session_state.selected_pages_set = set(range(1, n_pages + 1))
     else:
-        thumbs = make_thumbnails_cached(pdf_bytes, dpi=100)
+        pdf_hash = _pdf_byteskey(pdf_bytes)
+        thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
         n_pages = len(thumbs)
         init_selection(n_pages)
 
