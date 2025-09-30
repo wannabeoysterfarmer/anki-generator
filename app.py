@@ -104,7 +104,7 @@ You are an expert tutor generating flashcards from lecture slides.
 Please analyze the following slide text and return up to {max_cards} high-quality Anki-style flashcards in this format:
 
 Q: What is the question?
-A: An accurate, tightened, scientifically-backed explanation for effective studying.
+A: An accurate, concise, scientifically-backed explanation for effective studying.
 
 Each card should test an important concept, mechanism, or relationship. No cloze deletions. Avoid trivia. Be educational and accurate.
 
