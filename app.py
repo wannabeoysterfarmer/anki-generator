@@ -306,22 +306,22 @@ max_cards = st.slider("Cards per slide", min_value=1, max_value=5, value=2, step
 
 selected_pages = None
 if uploaded_pdf is not None:
-    # Cache thumbnails by *content* so UI is snappy on re-renders
     pdf_bytes = uploaded_pdf.getvalue()
     pdf_key = _pdf_byteskey(pdf_bytes)
 
-    # Reset selection set when a new PDF arrives
     if st.session_state.get("pdf_key") != pdf_key:
         st.session_state.pdf_key = pdf_key
-        pdf_hash = _pdf_byteskey(pdf_bytes)
-        thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
-        n_pages = len(thumbs)
-        st.session_state.selected_pages_set = set(range(1, n_pages + 1))
+        with st.spinner("Loading slides..."):
+            pdf_hash = _pdf_byteskey(pdf_bytes)
+            thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
+            n_pages = len(thumbs)
+            st.session_state.selected_pages_set = set(range(1, n_pages + 1))
     else:
-        pdf_hash = _pdf_byteskey(pdf_bytes)
-        thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
-        n_pages = len(thumbs)
-        init_selection(n_pages)
+        with st.spinner("Loading slides..."):
+            pdf_hash = _pdf_byteskey(pdf_bytes)
+            thumbs = make_thumbnails_cached(pdf_bytes, pdf_hash, dpi=100)
+            n_pages = len(thumbs)
+            init_selection(n_pages)
 
     st.subheader("Select slides to include")
     st.caption("Selections apply instantly; paging won’t lose your choices.")
