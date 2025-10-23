@@ -394,6 +394,8 @@ st.markdown("""
 
 Once you finish selecting the slides you'd like to convert into Anki flashcards,  
 click the **Generate Deck** button below. After a couple minutes, you'll see a **download link** to get your `.apkg` deck file.
+
+**Note:** If you upload a large PDF with many slides, it may take **5–10 seconds** for all the slides to finish rendering on the page. 
 """)
 st.divider()
 st.subheader("Build Deck")
