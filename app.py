@@ -44,17 +44,17 @@ from datetime import datetime
 from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 # ---------------- Google Drive Data Storage and Analytics ----------------
-scope = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+#scope = [
+  #  "https://www.googleapis.com/auth/spreadsheets",
+   # "https://www.googleapis.com/auth/drive",
+#]
 
-creds = Credentials.from_service_account_info(
-    st.secrets["google_service_account"], scopes=scope
-)
+#creds = Credentials.from_service_account_info(
+ #   st.secrets["google_service_account"], scopes=scope
+#)
 
-gc = gspread.authorize(creds)
-sheet = gc.open("Decksmith Analytics").sheet1
+#gc = gspread.authorize(creds)
+#sheet = gc.open("Decksmith Analytics").sheet1
 
 # ---------------- Cache helpers ----------------
 @st.cache_data(show_spinner=False)
@@ -207,27 +207,27 @@ def build_anki_deck(cards, deck_name: str) -> str:
     return output_file
 
 # ---------------- Google Drive Data Storage and Analytics Logging Function ----------------
-def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards, retries=3):
-    """Safely log each deck generation to Google Sheets, with retry logic to prevent transient API failures."""
-    for attempt in range(retries):
-        try:
-            sheet.append_row([
-                datetime.utcnow().isoformat(),  # Timestamp
-                user_id,                        # Persistent user ID
-                len(final_selected) if final_selected else "unknown",  # Slide count
-                num_cards,                      # Total number of cards
-                uploaded_file.name              # PDF file name
-            ])
-            break  # ✅ Success — exit the retry loop
-        except gspread.exceptions.APIError as e:
-            if attempt < retries - 1:
-                st.info("Google Sheets busy — retrying in 1.5s...")
-                time.sleep(1.5)
-            else:
-                st.warning("⚠️ Logging failed after multiple attempts. Deck still generated successfully.")
-        except Exception as e:
-            st.warning(f"⚠️ Unexpected logging error: {e}")
-            break
+#def log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, num_cards, retries=3):
+   # """Safely log each deck generation to Google Sheets, with retry logic to prevent transient API failures."""
+ #   for attempt in range(retries):
+     #   try:
+          #  sheet.append_row([
+               # datetime.utcnow().isoformat(),  # Timestamp
+                #user_id,                        # Persistent user ID
+              #  len(final_selected) if final_selected else "unknown",  # Slide count
+              #  num_cards,                      # Total number of cards
+              #  uploaded_file.name              # PDF file name
+          #  ])
+         #   break  # ✅ Success — exit the retry loop
+    #    except gspread.exceptions.APIError as e:
+          #  if attempt < retries - 1:
+              #  st.info("Google Sheets busy — retrying in 1.5s...")
+           #     time.sleep(1.5)
+         #   else:
+             #   st.warning("⚠️ Logging failed after multiple attempts. Deck still generated successfully.")
+       # except Exception as e:
+          #  st.warning(f"⚠️ Unexpected logging error: {e}")
+           # break
 
 def process_pdf_and_generate_deck(
     uploaded_file,
@@ -270,7 +270,7 @@ def process_pdf_and_generate_deck(
         apkg_path = build_anki_deck(anki_cards, deck_name)
         
         # Log to analytics sheet
-        log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, len(anki_cards))
+        #log_deck_generation_to_sheet(sheet, uploaded_file, deck_name, len(anki_cards))
 
         with open(apkg_path, "rb") as f:
             apkg_bytes = f.read()
